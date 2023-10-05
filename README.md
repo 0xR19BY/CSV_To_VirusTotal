@@ -21,7 +21,7 @@ Within the directory, there is an input.csv - this is where the data that you wi
 | **...** | **...**    |  
 
 Usage:
- - Change the api_key variable on line 10 to your VirusTotal API key
+ - Put your API key into api_config.conf
  - Command: '''python csv_to_vt.py -u'''
  - Results will be displayed in your terminal and also be written to a .txt file under name results_url_*
 

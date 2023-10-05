@@ -7,7 +7,10 @@ from colorama import Fore
 from datetime import datetime
 import time
 
-api_key = '' #Put your own VirusTotal API key here!
+def api_read():
+    with open('api_config.conf', 'r') as api_file:
+        api_key = api_file.read()
+        return api_key
 
 def readCSV():
     column = []
@@ -60,7 +63,7 @@ def url_search():
                     time.sleep(2)
                 time.sleep(2)
                 break
-            result = pass_through_virus_total(i, api_key)
+            result = pass_through_virus_total(i, api_read())
 
             if "HTTP request failed" in result:
                 print(Fore.YELLOW + result + f'{i}')

@@ -8,14 +8,14 @@ from datetime import datetime
 import time
 
 def api_read():
-    with open('api_config.conf', 'r') as api_file:
+    with open('api_config.conf', 'r', encoding="utf-8") as api_file:
         api_key = api_file.read()
         return api_key
 
 def readCSV():
     column = []
 
-    with open('input.csv', 'r') as csvfile:
+    with open('input.csv', 'r', encoding="utf-8") as csvfile:
         csvreader = csv.reader(csvfile)
 
         for row in csvreader:
@@ -23,18 +23,62 @@ def readCSV():
             
     return column
 
-def pass_through_virus_total(values, apikey):
-    encodedURL = base64.urlsafe_b64encode(values.encode()).decode().strip("=") #This is just how VT wants their URLs :/ Causes bugs to format this way for some URLs
-    url = f"https://www.virustotal.com/api/v3/urls/{encodedURL}"
-    headers = {"accept": "application/json",
-               "x-apikey": apikey}
-    
-    response = requests.get(url, headers=headers)
-    status_code = response.status_code
-    if status_code != 200:
-        return f"!!! HTTP request failed with status code {status_code} to URL: "
+def check_value(value):
+    hash_pattern = r'^[0-9a-fA-F]+$'
+    ipv4_pattern = r'^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+    url_pattern = r'^(https?|ftp)://[^\s/$.?#].[^\s]*$'
 
-    return response.text
+    hash_matches = re.findall(hash_pattern, value, re.IGNORECASE)
+    ipv4_matches = re.findall(ipv4_pattern, value, re.IGNORECASE)
+    url_matches = re.findall(url_pattern, value, re.IGNORECASE)
+
+    if hash_matches:
+        return {value : 'hash'}
+    elif ipv4_matches:
+        return {value: 'ipv4'}
+    elif isinstance(value, str): #regex can vary too much - this is now a test
+        return {value : 'url'}
+    else:
+        print("!value panic! exiting")
+        exit()
+    
+def pass_through_virus_total(values, apikey):
+    #Searches if it is a URL
+    if check_value(values) == {values : 'url'}: #This took way too much brain power
+        encodedURL = base64.urlsafe_b64encode(values.encode()).decode().strip("=") #This is just how VT wants their URLs :/ Causes bugs to format this way for some URLs
+        url = f"https://www.virustotal.com/api/v3/urls/{encodedURL}"
+        headers = {"accept": "application/json",
+                "x-apikey": apikey}
+        
+        response = requests.get(url, headers=headers)
+        status_code = response.status_code
+        if status_code != 200:
+            return f"!!! HTTP request failed with status code {status_code} to URL: "
+
+        return response.text
+    elif check_value(values) == {values : 'ipv4'}:
+        url = f"https://www.virustotal.com/api/v3/ip_addresses/{values}"
+        headers = {"accept": "application/json",
+                "x-apikey": apikey}
+        
+        response = requests.get(url, headers=headers)
+        status_code = response.status_code
+        if status_code != 200:
+            return f"!!! HTTP request failed with status code {status_code} to IPv4 address: "
+
+        return response.text
+    elif check_value(values) == {values : 'hash'}:
+        url = f"https://www.virustotal.com/api/v3/files/{values}"
+        headers = {"accept": "application/json",
+                "x-apikey": apikey}
+        
+        response = requests.get(url, headers=headers)
+        status_code = response.status_code
+        
+        if status_code != 200:
+            return f"!!! HTTP request failed with status code {status_code} to IPv4 address: "
+
+        return response.text
 
 '''
 The script begins to fail by about the 140th value in the csv (Status code 429). Unsure if this is due to limitations of
@@ -47,14 +91,14 @@ It should be noted that on a personal license, we will be getting status code 42
 '''
 
 
-def url_search():
+def search(): #THIS DOESN"T HAVE TO JUST SEARCH URLS!!!
     input_values = readCSV()
 
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     file_name = f"results_url_{current_datetime}.txt"
     errors = []
 
-    with open(file_name, 'w') as results_file:
+    with open(file_name, 'w', encoding="utf-8") as results_file:
         iteration = 0
         for i in input_values:
             iteration += 1
@@ -65,10 +109,13 @@ def url_search():
                 break
             result = pass_through_virus_total(i, api_read())
 
-            if "HTTP request failed" in result:
+            if result == None:
+                print(Fore.BLUE + "Error: No data to analyse!!!")
+            elif "HTTP request failed" in result:
                 print(Fore.YELLOW + result + f'{i}')
                 results_file.write(result + f'{i}' + '\n')
                 errors.extend(result)
+            #Will eventually deprecate this. At the end of the response we can look at the summary...
             else:
                 pattern = r'\b(phishing|malicious)\b'
                 matches = re.findall(pattern, result, re.IGNORECASE)
@@ -80,15 +127,23 @@ def url_search():
                     print(Fore.GREEN + f"{i} has no vendors flagging this as malicious")
                     results_file.write(f"{i} has no vendors flagging this as malicious" + '\n')
 
-        print(f"------------------------------------------\nThe folowing errors have occured:")
+        print("------------------------------------------\nThe following errors have occurred:")
         for i in errors:
             print(errors[i] + '\n')
 
 def main():
     try:
-        if sys.argv[1] == '-u':
-            url_search()
+        if sys.argv[1] == '-s':
+            search()
+        #Looking for API key
+        elif sys.argv[1] == '-a':
+            if sys.argv[2] != '':
+                with open('api_config.conf', 'w', encoding="utf-8") as api_edit:
+                    api_edit.write(sys.argv[2])
+            elif sys.argv == None:
+                print('API Key not supplied')
+
     except IndexError:
-        print("Flag not recognised")
+        print("COMMANDS:\n > -u: URL Search\n > -a API_KEY: Input your API key")
         
 main()

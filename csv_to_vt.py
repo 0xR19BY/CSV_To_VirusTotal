@@ -6,6 +6,7 @@ import re
 from colorama import Fore
 from datetime import datetime
 import time
+import json
 
 def api_read():
     with open('api_config.conf', 'r', encoding="utf-8") as api_file:
@@ -90,15 +91,17 @@ It seems like it's just rate limiting. I'm going to add a 2 second buffer after 
 It should be noted that on a personal license, we will be getting status code 429 after the 500th search.
 '''
 
-
-def search(): #THIS DOESN"T HAVE TO JUST SEARCH URLS!!!
+def search(): 
     input_values = readCSV()
 
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    file_name = f"results_url_{current_datetime}.txt"
+    file_name = f"results_url_{current_datetime}.csv"
     errors = []
 
     with open(file_name, 'w', encoding="utf-8") as results_file:
+        header = 'Object, No. Malicious, No. Suspicious \n'
+        results_file.write(header)
+
         iteration = 0
         for i in input_values:
             iteration += 1
@@ -113,19 +116,24 @@ def search(): #THIS DOESN"T HAVE TO JUST SEARCH URLS!!!
                 print(Fore.BLUE + "Error: No data to analyse!!!")
             elif "HTTP request failed" in result:
                 print(Fore.YELLOW + result + f'{i}')
-                results_file.write(result + f'{i}' + '\n')
+                results_file.write(f'{i},ERROR,ERROR\n')
                 errors.extend(result)
-            #Will eventually deprecate this. At the end of the response we can look at the summary...
-            else:
-                pattern = r'\b(phishing|malicious)\b'
-                matches = re.findall(pattern, result, re.IGNORECASE)
 
-                if matches:
-                    print(Fore.RED + f"{i} has been flagged as malicious by >=1 vendor")
-                    results_file.write(f"{i} has been flagged as malicious by >=1 vendor" + '\n')
+            else:
+                data = json.loads(result)
+
+                #Will extract the last_analysis_stats field
+                last_analysis_stats = data['data']['attributes']['last_analysis_stats']
+                #To access individual fields
+                malicious = last_analysis_stats['malicious']
+                suspicious = last_analysis_stats['suspicious']
+
+                if malicious > 0 or suspicious > 0:
+                    print(Fore.RED + f"{i} flagged as malicious by {malicious} vendors and suspicious by {suspicious} vendors")
+                    results_file.write(f"{i},{malicious},{suspicious} \n")
                 else:
-                    print(Fore.GREEN + f"{i} has no vendors flagging this as malicious")
-                    results_file.write(f"{i} has no vendors flagging this as malicious" + '\n')
+                    print(Fore.GREEN + f"{i} not flagged as malicious or suspicious")
+                    results_file.write(f"{i},N/A,N/A\n")
 
         print("------------------------------------------\nThe following errors have occurred:")
         for i in errors:

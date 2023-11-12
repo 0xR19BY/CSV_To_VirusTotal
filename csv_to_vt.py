@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import csv
 import sys
 import requests
@@ -9,11 +10,13 @@ import time
 import json
 
 def api_read():
+    '''opens api_config.conf and extracts the API key'''
     with open('api_config.conf', 'r', encoding="utf-8") as api_file:
         api_key = api_file.read()
         return api_key
 
 def readCSV():
+    '''Reads the IPs in CSV and converts to a list'''
     column = []
 
     with open('input.csv', 'r', encoding="utf-8") as csvfile:
@@ -25,6 +28,7 @@ def readCSV():
     return column
 
 def check_value(value):
+    '''Logic to determin what type of IOC a given value is'''
     hash_pattern = r'^[0-9a-fA-F]+$'
     ipv4_pattern = r'^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
     url_pattern = r'^(https?|ftp)://[^\s/$.?#].[^\s]*$'
@@ -44,7 +48,7 @@ def check_value(value):
         exit()
     
 def pass_through_virus_total(values, apikey):
-    #Searches if it is a URL
+    '''Conditional procedures based off of IOC type'''
     if check_value(values) == {values : 'url'}: #This took way too much brain power
         encodedURL = base64.urlsafe_b64encode(values.encode()).decode().strip("=") #This is just how VT wants their URLs :/ Causes bugs to format this way for some URLs
         url = f"https://www.virustotal.com/api/v3/urls/{encodedURL}"
@@ -91,7 +95,8 @@ It seems like it's just rate limiting. I'm going to add a 2 second buffer after 
 It should be noted that on a personal license, we will be getting status code 429 after the 500th search.
 '''
 
-def search(): 
+def search():
+    '''function designed for output product''' 
     input_values = readCSV()
 
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -140,7 +145,8 @@ def search():
             print(errors[i] + '\n')
 
 def main():
-    try:
+    '''main function... docstring added to satisfy pylint'''
+    try: #I'll eventually use argparse instead of this incredibly tedious method
         if sys.argv[1] == '-s':
             search()
         #Looking for API key
